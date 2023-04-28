@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/ethanw/Repos/TextureRender/build",
+  "command": "/usr/bin/g++   -g -o CMakeFiles/Render.dir/main.cpp.o -c /home/ethanw/Repos/TextureRender/main.cpp",
+  "file": "/home/ethanw/Repos/TextureRender/main.cpp",
+  "output": "CMakeFiles/Render.dir/main.cpp.o"
+}
+]

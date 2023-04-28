@@ -1,0 +1,3 @@
+/home/ethanw/Repos/TextureRender/build/CMakeFiles/Render.dir
+/home/ethanw/Repos/TextureRender/build/CMakeFiles/edit_cache.dir
+/home/ethanw/Repos/TextureRender/build/CMakeFiles/rebuild_cache.dir

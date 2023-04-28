@@ -1,0 +1,1 @@
+/usr/bin/g++ -g CMakeFiles/Render.dir/main.cpp.o -o Render  -lvulkan /usr/lib/libglfw.so.3.3 
