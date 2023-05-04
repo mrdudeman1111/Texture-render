@@ -12,6 +12,7 @@ layout(location=0) out vec4 OutColor;
 
 void main()
 {
-  OutColor = texture(InTexture, inCoord);
+  vec4 Alb = texture(InTexture, inCoord);
+  OutColor = vec4(Alb.rgb, 1.0);
 }
 

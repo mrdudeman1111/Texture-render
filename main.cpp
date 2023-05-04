@@ -34,6 +34,13 @@ struct Image
   VkImageLayout CurrentLayout;
 };
 
+struct Buffer
+{
+  public:
+  VkDeviceMemory Memory;
+  VkBuffer Buffer;
+};
+
 struct Vulkan
 {
   public:
@@ -122,6 +129,37 @@ Image CreateImage(VkFormat Format, VkExtent3D Extent, VkImageUsageFlags Usage)
   vkBindImageMemory(Context->Device, Ret.Image, Ret.Memory, 0);
 
   return Ret;
+}
+
+Buffer CreateStagingBuffer(VkDeviceSize Size)
+{
+  Buffer Ret;
+
+  VkBufferCreateInfo BufferInf{};
+  BufferInf.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  BufferInf.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  BufferInf.size = Size;
+  BufferInf.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+  if(vkCreateBuffer(Context->Device, &BufferInf, nullptr, &Ret.Buffer) != VK_SUCCESS)
+  {
+    throw std::runtime_error("failed to create staging buffer");
+  }
+
+  VkMemoryRequirements MemReq;
+  vkGetBufferMemoryRequirements(Context->Device, Ret.Buffer, &MemReq);
+
+  VkMemoryAllocateInfo AllocInf{};
+  AllocInf.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  AllocInf.allocationSize = MemReq.size;
+  AllocInf.memoryTypeIndex = GetMemIndex(MemReq.memoryTypeBits);
+
+  if(vkAllocateMemory(Context->Device, &AllocInf, nullptr, &Ret.Memory) != VK_SUCCESS)
+  {
+    throw std::runtime_error("Failed to allocate staging memory");
+  }
+
+  vkBindBufferMemory(Context->Device, Ret.Buffer, Ret.Memory, 0);
 }
 
 std::vector<char> ReadFile(const char* FilePath)
@@ -480,8 +518,7 @@ void InitRendering(Image* Texture)
   vkResetFences(Context->Device, Context->SwapImages.size(), Context->Fences.data());
 }
 
-VkPipeline InitPipeline(Image* Texture, VkDescriptorSetLayout TextureLayout)
-{
+VkPipeline InitPipeline(Image* Texture, VkDescriptorSetLayout TextureLayout) {
   VkShaderModule Vert;
   VkShaderModule Frag;
 
@@ -661,7 +698,7 @@ int main()
     ImageCI.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
     ImageCI.extent = VkExtent3D{(uint32_t)Width, (uint32_t)Height, 1};
     ImageCI.format = VK_FORMAT_R8G8B8A8_SRGB;
-    ImageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ImageCI.tiling = VK_IMAGE_TILING_LINEAR;
     ImageCI.samples = VK_SAMPLE_COUNT_1_BIT;
     ImageCI.imageType = VK_IMAGE_TYPE_2D;
     ImageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -721,20 +758,6 @@ int main()
     {
       throw std::runtime_error("Failed to create image view");
     }
-
-    Texture.AttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    Texture.AttachmentDescription.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    Texture.AttachmentDescription.format = ImageCI.format;
-    Texture.AttachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
-    Texture.AttachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    Texture.AttachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    Texture.AttachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    Texture.AttachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-    Texture.AttachmentDescription.flags = 0;
-
-    Texture.AttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    Texture.AttachmentReference.attachment = 2;
   // Image
 
   VkSampler TextureSampler;
@@ -891,7 +914,7 @@ int main()
 
         vkCmdBeginRenderPass(Context->RenderBuffers[i], &RenderBegin, VK_SUBPASS_CONTENTS_INLINE);
 
-          vkCmdBindDescriptorSets(Context->RenderBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, Context->PipeLayout, 0, 1, &TextureSet, 0, 0);
+          vkCmdBindDescriptorSets(Context->RenderBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, Context->PipeLayout, 0, 1, &TextureSet, 0, nullptr);
           vkCmdBindPipeline(Context->RenderBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, OurPipe);
           vkCmdDraw(Context->RenderBuffers[i], 4, 0, 0, 0);
 
@@ -907,7 +930,7 @@ int main()
 
     while(!glfwWindowShouldClose(Context->Window))
     {
-      VkResult Err = vkAcquireNextImageKHR(Context->Device, Context->Swapchain, 1, Context->Semaphores[FrameIndex], nullptr, &ImageIndex);
+      VkResult Err = vkAcquireNextImageKHR(Context->Device, Context->Swapchain, UINT64_MAX, Context->Semaphores[FrameIndex], nullptr, &ImageIndex);
 
       if(Err != VK_SUCCESS)
       {
@@ -915,12 +938,15 @@ int main()
         throw std::runtime_error("Failed to acquire next image");
       }
 
+      VkPipelineStageFlags WaitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
       VkSubmitInfo SubmitInf{};
       SubmitInf.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
       SubmitInf.commandBufferCount = 1;
       SubmitInf.pCommandBuffers = &Context->RenderBuffers[ImageIndex];
       SubmitInf.waitSemaphoreCount = 1;
-      SubmitInf.pWaitSemaphores = &Context->Semaphores[FrameIndex];
+      SubmitInf.pWaitSemaphores = &Context->Semaphores[FrameIndex]; // Wait for next image to be acquired.
+      SubmitInf.pWaitDstStageMask = &WaitStages;                    // At this stage
 
       VkPresentInfoKHR PresentInf{};
       PresentInf.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -930,13 +956,13 @@ int main()
 
       vkQueueSubmit(Context->GraphicsQueue, 1, &SubmitInf, Context->Fences[FrameIndex]);
 
+      vkWaitForFences(Context->Device, 1, &Context->Fences[FrameIndex], VK_TRUE, UINT64_MAX);
+      vkResetFences(Context->Device, 1, &Context->Fences[FrameIndex]);
+
       vkQueuePresentKHR(Context->GraphicsQueue, &PresentInf);
 
       FrameIndex++;
       FrameIndex = FrameIndex % Context->RenderBuffers.size();
-
-      vkWaitForFences(Context->Device, 1, &Context->Fences[FrameIndex], VK_TRUE, UINT64_MAX);
-      vkResetFences(Context->Device, 1, &Context->Fences[FrameIndex]);
 
       glfwPollEvents();
 

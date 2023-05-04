@@ -13,7 +13,7 @@ layout(location=0) out vec2 OutCoord;
 
 void main()
 {
-    gl_Position = vec4(Vertices[gl_VertexIndex], 0.f);
+    gl_Position = vec4(Vertices[gl_VertexIndex], 1.f);
     OutCoord = TexCoord[gl_VertexIndex];
 }
 
